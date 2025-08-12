@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Price Barcode Label Fiko</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400..700&family=Noto+Serif+Lao:wght@100..900&display=swap" rel="stylesheet">
+
+  <!-- Bootstrap (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+  <!-- JsBarcode (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+  <style>
+    :root { --label-w: 30mm; --label-h: 20mm; }
+
+    /* Base fonts */
+    html, body { font-family: "Noto Serif Lao", system-ui, serif; }
+
+    /* Print: only the label, exact size */
+    @page { size: var(--label-w) var(--label-h); margin: 0; }
+    @media print {
+      body * { visibility: hidden !important; }
+      #printArea, #printArea * { visibility: visible !important; }
+      /* Place the label at the top-left of the printed page */
+      #printArea {
+        position: fixed;
+        inset: 0;
+        width: var(--label-w);
+        height: var(--label-h);
+        margin: 0;
+      }
+      .no-print { display: none !important; }
+    }
+
+    /* Layout */
+    .preview-area {
+      display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: start;
+    }
+    .label-outline {
+      border: 1px dashed #bbb; padding: 4px; border-radius: .25rem; background: #fff;
+      font-family: "Noto Serif Lao", serif; /* force font here too */
+    }
+
+    /* Printable label area */
+    .print-wrap {
+      width: var(--label-w); height: var(--label-h);
+      overflow: hidden; display: flex; align-items: center; justify-content: center; background: #fff;
+      font-family: "Noto Serif Lao", serif; /* ensure font inside label */
+    }
+    .label {
+      width: 100%; height: 100%;
+      display: grid; grid-template-rows: 1fr auto auto;
+      align-items: center; justify-items: center;
+    }
+
+    .barcode-wrap { width: 100%; height: 100%; display: grid; align-items: center; justify-items: center; }
+    .barcode-wrap svg { width: 98%; height: 100%; }
+
+    .label-name, .label-price {
+      line-height: 1; margin: 0; padding: 0; font-size: 12px; text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+      font-family: "Noto Serif Lao", serif; /* default */
+    }
+    /* Use Dancing Script only for name (you can switch back if you want all Lao serif) */
+    .label-name { font-family: "Noto Serif Lao", cursive; font-weight: 600; }
+    .label-price { font-weight: 700; }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+
+    <h1 class="h4 mb-3">Price Barcode Generator | ລະບົບສ້າງບາໂຄດໃຫ້ກັບສິນຄ້າ</h1>
+
+    <div class="card mb-4 no-print">
+      <div class="card-body">
+        <form id="labelForm" class="row gy-3">
+
+          <!-- Code -->
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="code">Code of Product | ລະຫັດຂອງສິນຄ້າ</label>
+            <input type="text" id="code" class="form-control" placeholder="ຕົວຢ່າງ: 885123456789" required>
+            <div class="form-text">Printed small under the bars.</div>
+          </div>
+
+          <!-- Format -->
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="format">Barcode type | ປະເພດຂອງບາໂຄດ</label>
+            <select id="format" class="form-select">
+              <option value="CODE128">CODE128 (flexible)</option>
+              <option value="EAN13">EAN‑13 (12–13 digits)</option>
+              <option value="EAN8">EAN‑8 (7–8 digits)</option>
+              <option value="UPC">UPC‑A (11–12 digits)</option>
+            </select>
+          </div>
+
+          <!-- Name -->
+          <div class="col-12 col-md-3">
+            <label class="form-label" for="name">Product name | ຊື່ສິນຄ້າ</label>
+            <input type="text" id="name" class="form-control" placeholder="ຕົວຢ່າງ: ປຶ້ມຂຽນ / Notebook" required>
+          </div>
+
+          <!-- Price & unit -->
+          <div class="col-8 col-md-2">
+            <label class="form-label" for="price">Price | ລາຄາສິນຄ້າ</label>
+            <input type="number" step="0.01" min="0" id="price" class="form-control" placeholder="e.g., 15000" required>
+          </div>
+
+          <div class="col-4 col-md-1">
+            <label class="form-label" for="unit">Unit | ຫົວໜ່ວຍ</label>
+            <select id="unit" class="form-select">
+              <option value="ກີບ">ກີບ</option>
+              <option value="ບາດ">ບາດ</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+
+          <div class="col-12 col-md-3" id="customUnitWrap" style="display:none;">
+            <label class="form-label" for="customUnit">Custom unit label</label>
+            <input type="text" id="customUnit" class="form-control" placeholder="e.g., USD, ¥, ₩, LAK">
+          </div>
+
+          <div class="col-12 d-flex gap-3">
+            <button type="button" class="btn btn-primary" id="previewBtn">Preview | ສະແດງຕົວຢ່າງ</button>
+            <button type="button" class="btn btn-outline-secondary" id="printBtn" disabled>Print | ພິມບາໂຄດ</button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+
+    <div class="preview-area">
+      <div>
+        <h2 class="h6">Live Preview</h2>
+        <div class="label-outline">
+          <!-- PRINT TARGET -->
+          <div id="printArea">
+            <div class="print-wrap">
+              <div class="label">
+                <div class="barcode-wrap">
+                  <svg id="barcode"></svg>
+                </div>
+                <p class="label-name" id="previewName">—</p>
+                <p class="label-price" id="previewPrice">—</p>
+              </div>
+            </div>
+          </div>
+          <!-- /PRINT TARGET -->
+        </div>
+        <div class="small text-muted mt-2">
+          Print scale: <strong>100%</strong>. Paper size: <strong>30×20 mm</strong>. Margins: <strong>none</strong>.
+        </div>
+      </div>
+
+      <div class="no-print">
+        <div class="card">
+          <div class="card-body">
+            <h3 class="h6">Notes | ໝາຍເຫດ</h3>
+            <ul class="mb-0 small">
+              <li>Choose barcode: CODE128, EAN‑13, EAN‑8, or UPC‑A.</li>
+              <li>Units: ກີບ, ບາດ, or custom.</li>
+              <li>Only the label prints; everything else is hidden.</li>
+              <li>Develop by P. SISAYEKO</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Elements
+    const codeEl   = document.getElementById('code');
+    const nameEl   = document.getElementById('name');
+    const priceEl  = document.getElementById('price');
+    const formatEl = document.getElementById('format');
+    const unitEl   = document.getElementById('unit');
+    const customUnitWrap = document.getElementById('customUnitWrap');
+    const customUnitEl   = document.getElementById('customUnit');
+
+    const barcode  = document.getElementById('barcode');
+    const pName    = document.getElementById('previewName');
+    const pPrice   = document.getElementById('previewPrice');
+    const prevBtn  = document.getElementById('previewBtn');
+    const printBtn = document.getElementById('printBtn');
+
+    // Toggle custom unit input
+    unitEl.addEventListener('change', () => {
+      customUnitWrap.style.display = unitEl.value === 'custom' ? 'block' : 'none';
+    });
+
+    function getUnitLabel() {
+      if (unitEl.value === 'custom') {
+        const u = (customUnitEl.value || '').trim();
+        return u || '';
+      }
+      return unitEl.value;
+    }
+
+    function formatAmountWithUnit(val, unitLabel) {
+      if (val === '' || isNaN(val)) return '—';
+      const num = Number(val);
+      const amount = num.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+      return unitLabel ? `${amount} ${unitLabel}` : amount;
+    }
+
+    const digitsOnly = (s) => /^[0-9]+$/.test(s);
+
+    function validateByFormat(fmt, value) {
+      const v = value.trim();
+      if (!v) return { ok: false, msg: 'Code is required.' };
+
+      switch (fmt) {
+        case 'EAN13':
+          if (!digitsOnly(v)) return { ok: false, msg: 'EAN‑13 must contain digits only.' };
+          if (v.length !== 12 && v.length !== 13) return { ok: false, msg: 'EAN‑13 must be 12 or 13 digits.' };
+          return { ok: true, normalized: v };
+        case 'EAN8':
+          if (!digitsOnly(v)) return { ok: false, msg: 'EAN‑8 must contain digits only.' };
+          if (v.length !== 7 && v.length !== 8) return { ok: false, msg: 'EAN‑8 must be 7 or 8 digits.' };
+          return { ok: true, normalized: v };
+        case 'UPC':
+          if (!digitsOnly(v)) return { ok: false, msg: 'UPC‑A must contain digits only.' };
+          if (v.length !== 11 && v.length !== 12) return { ok: false, msg: 'UPC‑A must be 11 or 12 digits.' };
+          return { ok: true, normalized: v };
+        case 'CODE128':
+        default:
+          return { ok: true, normalized: v };
+      }
+    }
+
+    function generatePreview() {
+      const code   = codeEl.value;
+      const name   = nameEl.value.trim();
+      const price  = priceEl.value;
+      const fmt    = formatEl.value;
+      const unit   = getUnitLabel();
+
+      if (!name || price === '') {
+        alert('Please fill in Product name and Price.');
+        return false;
+      }
+
+      const validation = validateByFormat(fmt, code);
+      if (!validation.ok) {
+        alert(validation.msg);
+        return false;
+      }
+
+      try {
+        // Render barcode with enforced font on the barcode text
+        JsBarcode(barcode, validation.normalized, {
+          format: fmt,
+          displayValue: true,
+          text: validation.normalized,
+          textPosition: "bottom",
+          textAlign: "center",
+          textMargin: 1,
+          font: "Noto Serif Lao",   // force this font on the SVG text
+          fontSize: 8,
+          margin: 0,
+          width: 1,
+          height: 34
+        });
+
+        // Force font family on the SVG text node (fallback if browser ignores JsBarcode font)
+        const textEl = barcode.querySelector("text");
+        if (textEl) {
+          textEl.setAttribute("style", "font-family:'Noto Serif Lao', serif; font-size:8px;");
+        }
+
+        // Update label texts
+        pName.textContent  = name;
+        pPrice.textContent = formatAmountWithUnit(price, unit);
+
+        printBtn.disabled = false;
+        return true;
+      } catch (e) {
+        console.error(e);
+        alert('Could not generate the barcode. Please check the code value and format.');
+        return false;
+      }
+    }
+
+    prevBtn.addEventListener('click', generatePreview);
+    printBtn.addEventListener('click', () => {
+      if (generatePreview()) window.print();
+    });
+  </script>
+</body>
+</html>
